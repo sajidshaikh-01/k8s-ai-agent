@@ -32,32 +32,33 @@ concrete fix, and recommends preventive action — all from real cluster data.
 
 ## 🏗️ Architecture
 
+```
 User
-│
-python -m k8s_ai_agent
-│
-CLI Layer (cli.py)
-│
-Kubernetes Investigation Layer (investigator.py)
-├── Pod Inspector
-├── Logs Collector
-├── Events Analyzer
-├── Deployment Inspector
-├── Service Inspector
-├── ConfigMap / Secret Checker
-├── PVC Inspector
-└── Node Inspector
-│
-Structured InvestigationData (models.py)
-│
-AI Reasoning Layer (reasoning.py)
-├── Gemini (free tier) — LLM_PROVIDER=gemini
-└── Claude — LLM_PROVIDER=anthropic (default)
-│
-Root Cause Analysis (JSON)
-│
-Rich CLI Report
-
+  │
+  python -m k8s_ai_agent
+  │
+  CLI Layer (cli.py)
+  │
+  Kubernetes Investigation Layer (investigator.py)
+  ├── Pod Inspector
+  ├── Logs Collector
+  ├── Events Analyzer
+  ├── Deployment Inspector
+  ├── Service Inspector
+  ├── ConfigMap / Secret Checker
+  ├── PVC Inspector
+  └── Node Inspector
+  │
+  Structured InvestigationData (models.py)
+  │
+  AI Reasoning Layer (reasoning.py)
+  ├── Gemini (free tier) — LLM_PROVIDER=gemini
+  └── Claude — LLM_PROVIDER=anthropic (default)
+  │
+  Root Cause Analysis (JSON)
+  │
+  Rich CLI Report
+```
 
 ---
 
@@ -101,20 +102,21 @@ to the configured LLM (Gemini by default in this setup, or Claude).
 
 ## 📁 Project Structure
 
+```
 k8s-ai-agent/
 ├── demo/
-│ └── broken-deployment.yaml
+│   └── broken-deployment.yaml
 ├── k8s_ai_agent/
-│ ├── main.py
-│ ├── cli.py
-│ ├── investigator.py
-│ ├── reasoning.py
-│ ├── models.py
-│ └── init.py
+│   ├── __main__.py
+│   ├── cli.py
+│   ├── investigator.py
+│   ├── reasoning.py
+│   ├── models.py
+│   └── __init__.py
 ├── .env.example
 ├── requirements.txt
 └── README.md
-
+```
 
 ---
 
@@ -139,13 +141,14 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-
+```
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your-gemini-key-here
 
-Optional: switch to Claude instead
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your-anthropic-key-here
+# Optional: switch to Claude instead
+# LLM_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=your-anthropic-key-here
+```
 
 The tool uses your existing kubeconfig — no cluster-side install required.
 
