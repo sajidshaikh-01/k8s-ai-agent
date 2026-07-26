@@ -1,89 +1,236 @@
-# AI Kubernetes Troubleshooting Agent
+# 🤖 AI Kubernetes Troubleshooting Agent
 
-A small CLI tool that investigates a failing Kubernetes pod (status, logs,
-events, deployment rollout) and uses Claude to correlate the evidence into a
-root cause, confidence score, and suggested fix — automating the first-pass
-triage step of an incident.
+An AI-powered Kubernetes troubleshooting CLI that automates the first stage of
+incident investigation.
 
-## Architecture
+Instead of manually running multiple `kubectl` commands during triage, this tool
+collects operational evidence from a Kubernetes cluster using the official
+Kubernetes Python client and sends the structured evidence to an LLM (Gemini or
+Claude) for automated Root Cause Analysis (RCA).
 
-```
-CLI  →  Investigation Layer (kubernetes client)  →  Structured evidence
-     →  AI Reasoning Layer (Claude API)           →  Root cause + fix + confidence
-     →  Rich CLI report
-```
+The AI identifies the root cause, provides a confidence score, suggests a
+concrete fix, and recommends preventive action — all from real cluster data.
 
-**Investigation Layer** (`investigator.py`)
-- Pod Inspector – phase, restart count, waiting/terminated reasons
-- Logs Collector – current + previous (crashed) container logs
-- Events Analyzer – recent namespace events tied to the pod
-- Deployment Inspector – rollout status, replica availability
+---
 
-**AI Reasoning Layer** (`reasoning.py`)
-- Builds a structured prompt from the evidence
-- Calls Claude with a system prompt constrained to return JSON:
-  root cause, confidence %, suggested fix, prevention tip
+## 🚀 Features
 
-## Setup
+- AI-assisted Kubernetes troubleshooting
+- Pod status inspection (phase, restart count, waiting/terminated reasons)
+- Current and previous (crashed) container log collection
+- Kubernetes events analysis
+- Deployment rollout inspection
+- Service endpoint validation (detects selector/label mismatches)
+- ConfigMap and Secret reference validation
+- Persistent Volume Claim (PVC) binding inspection
+- Node condition inspection (pressure conditions, allocatable resources)
+- Pluggable LLM backend — Gemini (free tier) or Claude, switchable via env var
+- Structured, JSON-constrained AI responses for reliable parsing
+- Rich, readable CLI output
 
+---
+
+## 🏗️ Architecture
+
+User
+│
+python -m k8s_ai_agent
+│
+CLI Layer (cli.py)
+│
+Kubernetes Investigation Layer (investigator.py)
+├── Pod Inspector
+├── Logs Collector
+├── Events Analyzer
+├── Deployment Inspector
+├── Service Inspector
+├── ConfigMap / Secret Checker
+├── PVC Inspector
+└── Node Inspector
+│
+Structured InvestigationData (models.py)
+│
+AI Reasoning Layer (reasoning.py)
+├── Gemini (free tier) — LLM_PROVIDER=gemini
+└── Claude — LLM_PROVIDER=anthropic (default)
+│
+Root Cause Analysis (JSON)
+│
+Rich CLI Report
+
+
+---
+
+## 🔄 Workflow
+
+**Step 1 — Select a failing pod**
 ```bash
-pip install -r requirements.txt
-cp .env.example .env   # add your ANTHROPIC_API_KEY
-```
-
-Requires a working kubeconfig (`~/.kube/config`) pointing at your cluster —
-same as `kubectl`. No extra cluster-side install needed.
-
-## Usage
-
-```bash
-python -m k8s_ai_agent --pod <pod-name> --namespace <namespace>
-
-# Also check the owning deployment's rollout status:
 python -m k8s_ai_agent --pod <pod-name> -n <namespace> -d <deployment-name>
-
-# Print the raw model response too:
-python -m k8s_ai_agent --pod <pod-name> -n <namespace> --show-evidence
 ```
 
-## Testing it against a real failure
+**Step 2** — The CLI connects to the cluster using your current kubeconfig context.
 
-`demo/broken-deployment.yaml` ships two intentionally broken deployments:
+**Step 3** — The investigation layer collects:
+- Pod status, restart count, waiting/terminated reasons
+- Current and previous container logs
+- Kubernetes events
+- Deployment rollout status
+- Service endpoints (if `-s` provided)
+- ConfigMap / Secret references and whether they exist
+- PVC binding status
+- Node conditions for the node the pod is scheduled on
+
+**Step 4** — Evidence is assembled into a structured `InvestigationData` object.
+
+**Step 5** — The reasoning layer builds a prompt from that evidence and sends it
+to the configured LLM (Gemini by default in this setup, or Claude).
+
+**Step 6** — The model returns a structured JSON diagnosis:
+```json
+{
+  "root_cause": "...",
+  "confidence": 100,
+  "suggested_fix": "...",
+  "prevention": "..."
+}
+```
+
+**Step 7** — The CLI renders it as a readable report using Rich.
+
+---
+
+## 📁 Project Structure
+
+k8s-ai-agent/
+├── demo/
+│ └── broken-deployment.yaml
+├── k8s_ai_agent/
+│ ├── main.py
+│ ├── cli.py
+│ ├── investigator.py
+│ ├── reasoning.py
+│ ├── models.py
+│ └── init.py
+├── .env.example
+├── requirements.txt
+└── README.md
+
+
+---
+
+## 🛠️ Installation
 
 ```bash
-kubectl apply -f demo/broken-deployment.yaml
+git clone https://github.com/<your-username>/k8s-ai-agent.git
+cd k8s-ai-agent
 
-# wait a few seconds for it to crash, then find the pod name:
-kubectl get pods -l app=broken-payment-service
+python3 -m venv venv
+source venv/bin/activate      # Windows: venv\Scripts\activate
 
-python -m k8s_ai_agent --pod <pod-name-from-above> -n default -d broken-payment-service
+pip install -r requirements.txt
 ```
 
-Expected diagnosis: missing `DATABASE_URL` → CrashLoopBackOff.
-The second deployment (`broken-image-service`) demonstrates ImagePullBackOff.
+---
 
-Clean up after:
+## ⚙️ Configuration
+
 ```bash
-kubectl delete -f demo/broken-deployment.yaml
+cp .env.example .env
 ```
 
-## Why this design
+Edit `.env`:
 
-- **No InsForge / auth / frontend** — this is deliberately scoped down from
-  the full "AI DevOps Kubernetes Agent" concept to just the investigation +
-  reasoning core, so every line is understandable and defensible, not
-  AI-generated boilerplate nobody can explain.
-- **Uses the real `kubernetes` client**, not `kubectl` subprocess calls — more
-  reliable parsing of structured API responses.
-- **JSON-constrained LLM output** — makes the diagnosis parseable and testable
-  rather than freeform text.
-- **Confidence scoring** — mirrors how a real triage engineer reasons: some
-  evidence gives high certainty (explicit error in logs), some is ambiguous
-  (resource pressure without a clear top cause).
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-key-here
 
-## Possible extensions
+Optional: switch to Claude instead
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-anthropic-key-here
 
-- Wrap `investigate_pod()` as an MCP tool so any MCP-compatible LLM client
-  can call it directly during an incident chat
-- Add a Slack bot front-end that posts the diagnosis to an incident channel
-- Extend investigation to Services/Ingress for networking-related failures
+The tool uses your existing kubeconfig — no cluster-side install required.
+
+---
+
+## ▶️ Usage
+
+**Investigate a pod**
+```bash
+python -m k8s_ai_agent --pod <pod-name> -n <namespace>
+```
+
+**Include deployment rollout status**
+```bash
+python -m k8s_ai_agent --pod <pod-name> -n <namespace> -d <deployment-name>
+```
+
+**Include deployment and service checks**
+```bash
+python -m k8s_ai_agent --pod <pod-name> -n <namespace> -d <deployment-name> -s <service-name>
+```
+
+**Show raw model response alongside the report**
+```bash
+python -m k8s_ai_agent --pod <pod-name> -n <namespace> -d <deployment-name> --show-evidence
+```
+
+---
+
+## 🧪 Testing
+
+The project ships two intentionally broken deployments for testing.
+
+```bash
+kubectl create namespace ai-agent-test
+kubectl apply -f demo/broken-deployment.yaml -n ai-agent-test
+kubectl get pods -n ai-agent-test
+```
+
+**CrashLoopBackOff scenario**
+```bash
+python -m k8s_ai_agent --pod broken-payment-service-xxxxx -n ai-agent-test -d broken-payment-service
+```
+
+**ImagePullBackOff scenario**
+```bash
+python -m k8s_ai_agent --pod broken-image-service-xxxxx -n ai-agent-test -d broken-image-service
+```
+
+**Cleanup**
+```bash
+kubectl delete namespace ai-agent-test
+```
+
+---
+
+## ✅ Tested Scenarios
+
+**CrashLoopBackOff**
+- Cause: missing `DATABASE_URL` environment variable
+- AI correctly identified root cause with 100% confidence, gave a concrete
+  `kubectl set env` fix, and a CI/CD validation prevention tip
+
+**ImagePullBackOff**
+- Cause: invalid Docker image tag
+- AI correctly identified the bad tag and suggested the corrected image reference
+
+---
+
+## 💻 Tech Stack
+
+- Python 3.12
+- Kubernetes Python Client
+- Google Gemini API / Anthropic Claude API
+- Rich (CLI output)
+- python-dotenv
+- kind (local Kubernetes for testing)
+- Git
+
+---
+
+## 🔮 Possible Extensions
+
+- Wrap the investigation functions as MCP (Model Context Protocol) tools so any
+  MCP-compatible LLM client can call them directly during an incident
+- Let the AI drive the investigation itself (agentic tool-calling) instead of
+  pre-fetching all evidence up front
+- Slack/webhook integration to post diagnoses directly to an incident channel
