@@ -1,0 +1,51 @@
+# Intentionally broken deployment for testing the AI agent.
+# The app expects DATABASE_URL and will crash without it -> CrashLoopBackOff.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-payment-service
+  labels:
+    app: broken-payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-payment-service
+  template:
+    metadata:
+      labels:
+        app: broken-payment-service
+    spec:
+      containers:
+        - name: app
+          image: busybox:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -z "$DATABASE_URL" ]; then
+                echo "FATAL: DATABASE_URL environment variable is not set"
+                exit 1
+              fi
+              sleep 3600
+          # DATABASE_URL is deliberately NOT set here
+---
+# A second scenario: bad image tag -> ImagePullBackOff
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-image-service
+  labels:
+    app: broken-image-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-image-service
+  template:
+    metadata:
+      labels:
+        app: broken-image-service
+    spec:
+      containers:
+        - name: app
+          image: nginx:this-tag-does-not-exist
